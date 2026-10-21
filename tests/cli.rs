@@ -3,7 +3,6 @@
 
 use std::ffi::OsString;
 use std::fs;
-use std::os::unix::ffi::OsStringExt;
 use std::os::unix::fs::{PermissionsExt, symlink};
 use std::path::{Path, PathBuf};
 use std::process::Command;
@@ -598,4 +597,15 @@ fn nested_git_repos_are_skipped() {
     let one = run(d, &["schema.md", "Kitchen/wt/n.md"]);
     assert_eq!(one.code, 0, "stdout:\n{}\nstderr:\n{}", one.stdout, one.stderr);
     assert!(one.stderr.contains("skipped Kitchen/wt/n.md (git repo)"), "stderr:\n{}", one.stderr);
+}
+
+#[test]
+fn breaker_tags_are_case_insensitive_like_obsidian() {
+    // Obsidian treats #Kitchen and #kitchen as one tag.
+    let fx = fixture("tagcase");
+    let d = &fx.0;
+    put(d, "schema.md", SCHEMA);
+    put(d, "Kitchen/Cap.md", "---\ntags: [Kitchen, Recipe]\ncreated: 2026-10-01\nstatus: made\n---\n");
+    let o = run(d, &["schema.md", "Kitchen"]);
+    assert_eq!(o.code, 0, "capitalised tags flagged:\n{}", o.stdout);
 }
