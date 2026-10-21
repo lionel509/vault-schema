@@ -15,6 +15,7 @@ macro_rules! say {
 }
 
 mod check;
+mod rare;
 mod schema;
 mod walk;
 
@@ -27,7 +28,7 @@ use std::process::ExitCode;
 use check::Problem;
 
 /// Summary order.
-const KINDS: [&str; 6] = ["yaml", "tags", "required", "value", "synonym", "io"];
+const KINDS: [&str; 7] = ["yaml", "tags", "rare", "required", "value", "synonym", "io"];
 
 fn main() -> ExitCode {
     let args: Vec<std::ffi::OsString> = std::env::args_os().skip(1).collect();
@@ -58,10 +59,18 @@ fn main() -> ExitCode {
     targets.retain(|t| seen.insert(t.path.clone()));
 
     let total = targets.len();
+    let texts: Vec<io::Result<String>> = targets.iter().map(|t| fs::read_to_string(&t.path)).collect();
+    // Rare tags are judged against every note in the scope, not only the targets.
+    let tally = rare::count(&targets, &texts, &schema);
+
     let mut bad_notes = 0;
-    for t in &targets {
-        let found = match fs::read_to_string(&t.path) {
-            Ok(text) => check::check_note(t, &text, &schema),
+    for (t, read) in targets.iter().zip(&texts) {
+        let found = match read {
+            Ok(text) => {
+                let mut f = check::check_note(t, text, &schema);
+                f.extend(rare::problems(t, text, &schema, &tally));
+                f
+            }
             Err(e) => vec![Problem {
                 path: t.display.clone(),
                 line: 1,
@@ -87,7 +96,7 @@ fn main() -> ExitCode {
 /// error, such as a closed pipe.
 fn report(problems: &[Problem], total: usize, bad_notes: usize) -> io::Result<()> {
     let mut out = BufWriter::new(io::stdout().lock());
-    let mut counts = [0usize; 6];
+    let mut counts = [0usize; 7];
     for p in problems {
         writeln!(out, "{}:{}: {}: {}", p.path.display(), p.line, p.field, p.msg)?;
         if let Some(i) = KINDS.iter().position(|k| *k == p.kind) {
