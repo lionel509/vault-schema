@@ -21,6 +21,10 @@ Output is one line per problem, `path:line: field: message`, then a summary:
 A `rare` problem counts toward exit 1 like the others. Its counts cover the
 whole scope, so a single-file run reads the rest of the scope too (read-only,
 same exclusions, nothing reported for them).
+A note in the scope that can't be read or has broken frontmatter counts as
+unknown; a tag is flagged rare only if it would stay under `min_uses` even if
+every unknown note used it. Read failures go to stderr and never change the
+exit code.
 
 ## Exit codes
 
