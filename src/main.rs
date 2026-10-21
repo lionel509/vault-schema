@@ -8,6 +8,7 @@ mod schema;
 mod walk;
 
 use std::fs;
+use std::io::{self, BufWriter, Write};
 use std::path::Path;
 use std::process::ExitCode;
 
@@ -59,28 +60,40 @@ fn main() -> ExitCode {
         problems.extend(found);
     }
 
+    // The exit code is known before anything is printed. A closed stdout
+    // (`| head`) stops the printing, not the run.
+    let exit = if problems.is_empty() { ExitCode::SUCCESS } else { ExitCode::from(1) };
+    let _ = report(&problems, total, bad_notes);
+    exit
+}
+
+/// Prints one line per problem, then the summary. Stops at the first write
+/// error, such as a closed pipe.
+fn report(problems: &[Problem], total: usize, bad_notes: usize) -> io::Result<()> {
+    let mut out = BufWriter::new(io::stdout().lock());
     let mut counts = [0usize; 6];
-    for p in &problems {
-        println!("{}:{}: {}: {}", p.path.display(), p.line, p.field, p.msg);
+    for p in problems {
+        writeln!(out, "{}:{}: {}: {}", p.path.display(), p.line, p.field, p.msg)?;
         if let Some(i) = KINDS.iter().position(|k| *k == p.kind) {
             counts[i] += 1;
         }
     }
 
     if problems.is_empty() {
-        println!("vault-schema: 0 problems in {total} notes");
-        return ExitCode::SUCCESS;
+        writeln!(out, "vault-schema: 0 problems in {total} notes")?;
+    } else {
+        let kinds: Vec<String> = KINDS
+            .iter()
+            .zip(counts)
+            .filter(|(_, c)| *c > 0)
+            .map(|(k, c)| format!("{k} {c}"))
+            .collect();
+        writeln!(
+            out,
+            "vault-schema: {} problems in {bad_notes} of {total} notes ({})",
+            problems.len(),
+            kinds.join(", ")
+        )?;
     }
-    let kinds: Vec<String> = KINDS
-        .iter()
-        .zip(counts)
-        .filter(|(_, c)| *c > 0)
-        .map(|(k, c)| format!("{k} {c}"))
-        .collect();
-    println!(
-        "vault-schema: {} problems in {bad_notes} of {total} notes ({})",
-        problems.len(),
-        kinds.join(", ")
-    );
-    ExitCode::from(1)
+    out.flush()
 }
