@@ -60,9 +60,17 @@ fn is_date(x: &str) -> bool {
     if !(digits(0..4) && digits(5..7) && digits(8..10)) {
         return false;
     }
+    let y: u32 = x[0..4].parse().unwrap_or(0);
     let m: u32 = x[5..7].parse().unwrap_or(0);
     let d: u32 = x[8..10].parse().unwrap_or(0);
-    (1..=12).contains(&m) && (1..=31).contains(&d)
+    let leap = y % 4 == 0 && (y % 100 != 0 || y % 400 == 0);
+    let days = match m {
+        2 if leap => 29,
+        2 => 28,
+        4 | 6 | 9 | 11 => 30,
+        _ => 31,
+    };
+    (1..=12).contains(&m) && (1..=days).contains(&d)
 }
 
 fn kind_mismatch(k: Kind, v: &Yaml) -> Option<String> {
