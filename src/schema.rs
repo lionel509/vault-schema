@@ -303,9 +303,14 @@ fn rel_path(s: &str, what: &str) -> Result<PathBuf, String> {
 type Types = Vec<(String, Vec<(String, Field)>)>;
 
 fn parse_types(v: &Yaml, scope: &str) -> Result<Types, String> {
-    let mut out = Vec::new();
+    let mut out: Types = Vec::new();
     for (tk, tv) in as_map(v, &format!("types in scope {scope}"))?.iter() {
         let tname = key(tk)?.to_string();
+        // Tags match case-insensitively, so two type names that differ only
+        // by case would both match one tag.
+        if let Some((prev, _)) = out.iter().find(|(t, _)| t.to_lowercase() == tname.to_lowercase()) {
+            return Err(format!("schema: types {prev} and {tname} in scope {scope} name the same type"));
+        }
         let where_ = format!("type {tname} in scope {scope}");
         let fields = match tv {
             Yaml::Null => Vec::new(),
