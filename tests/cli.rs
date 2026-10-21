@@ -761,3 +761,18 @@ fn breaker_overlapping_args_report_each_note_once() {
     assert_eq!(hits, 1, "one bad note printed {hits} times:\n{}", o.stdout);
     assert_eq!(last_line(&o.stdout), "vault-schema: 1 problems in 1 of 2 notes (value 1)");
 }
+
+#[test]
+fn breaker_scopes_differing_only_by_case_are_a_schema_error() {
+    // Kitchen and kitchen name one folder. Picking one silently is a schema error.
+    let fx = fixture("scopecase");
+    let d = &fx.0;
+    put(
+        d,
+        "schema.md",
+        "# Schema\n\n```yaml\nroot: .\nscopes:\n  Kitchen:\n    domain: [kitchen]\n    types:\n      reference: {}\n  kitchen:\n    domain: [other]\n    types:\n      reference: {}\n```\n",
+    );
+    let o = run(d, &["schema.md", "Kitchen"]);
+    assert_eq!(o.code, 2, "two scopes for one folder accepted:\n{}", o.stdout);
+    assert!(o.stderr.contains("name the same folder"), "stderr:\n{}", o.stderr);
+}
