@@ -609,3 +609,33 @@ fn breaker_tags_are_case_insensitive_like_obsidian() {
     let o = run(d, &["schema.md", "Kitchen"]);
     assert_eq!(o.code, 0, "capitalised tags flagged:\n{}", o.stdout);
 }
+
+#[test]
+fn breaker_sigpipe_does_not_panic() {
+    // Many problems, and the reader closes after one line. A panic on the
+    // broken pipe exits 101.
+    let fx = fixture("sigpipe");
+    let d = &fx.0;
+    put(d, "schema.md", SCHEMA);
+    let tags: Vec<String> = (0..20000).map(|i| format!("\"#t{i}\"")).collect();
+    put(
+        d,
+        "Kitchen/Many.md",
+        &format!("---\ntags: [kitchen, recipe, {}]\ncreated: 2026-10-01\nstatus: made\n---\n", tags.join(", ")),
+    );
+    let mut child = Command::new(bin())
+        .current_dir(d)
+        .env("PWD", d)
+        .args(["schema.md", "Kitchen"])
+        .stdout(std::process::Stdio::piped())
+        .stderr(std::process::Stdio::piped())
+        .spawn()
+        .expect("spawn vault-schema");
+    {
+        use std::io::{BufRead, BufReader};
+        let mut first = String::new();
+        BufReader::new(child.stdout.take().unwrap()).read_line(&mut first).unwrap();
+    }
+    let st = child.wait().unwrap();
+    assert_ne!(st.code(), Some(101), "panicked on a closed stdout");
+}
