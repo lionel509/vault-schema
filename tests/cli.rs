@@ -1,7 +1,9 @@
 //! End-to-end tests. Each one runs the real binary on a fixture built under the
 //! temp dir with made-up notes only.
 
+use std::ffi::OsString;
 use std::fs;
+use std::os::unix::ffi::OsStringExt;
 use std::os::unix::fs::{PermissionsExt, symlink};
 use std::path::{Path, PathBuf};
 use std::process::Command;
@@ -77,11 +79,16 @@ struct Out {
 }
 
 fn run(dir: &Path, args: &[&str]) -> Out {
+    run_os(dir, args.iter().map(OsString::from).collect())
+}
+
+/// Like `run`, for arguments that are not valid UTF-8.
+fn run_os(dir: &Path, args: Vec<OsString>) -> Out {
     // A shell sets PWD on cd, so the child sees the logical path it was started in.
     let o = Command::new(bin())
         .current_dir(dir)
         .env("PWD", dir)
-        .args(args)
+        .args(&args)
         .output()
         .expect("spawn vault-schema");
     Out {
@@ -550,4 +557,45 @@ fn exclude_is_relative_to_root() {
         &[schema_abs.to_str().unwrap(), note_abs.to_str().unwrap()],
     );
     assert_eq!(abs.code, 1, "stdout:\n{}\nstderr:\n{}", abs.stdout, abs.stderr);
+}
+
+const NESTED_SCHEMA: &str = r#"# Nested schema
+
+```yaml
+root: .
+scopes:
+  Kitchen:
+    domain: [kitchen]
+    types:
+      reference: {}
+  Kitchen/Code:
+    domain: [code]
+    types:
+      reference: {}
+```
+"#;
+
+#[test]
+fn nested_git_repos_are_skipped() {
+    let fx = fixture("nested");
+    let d = &fx.0;
+    put(d, "schema.md", NESTED_SCHEMA);
+    put(d, ".git/HEAD", "ref\n");
+    put(d, "Kitchen/proj/.git/HEAD", "ref\n");
+    put(d, "Kitchen/proj/README.md", "# Proj\n");
+    put(d, "Kitchen/wt/.git", "gitdir: x\n");
+    put(d, "Kitchen/wt/n.md", POISON);
+    // A scope folder that is itself a repo is still checked.
+    put(d, "Kitchen/Code/.git", "gitdir: y\n");
+    put(d, "Kitchen/Code/bad.md", POISON);
+    let all = run(d, &["schema.md", "."]);
+    assert_eq!(all.code, 1, "stdout:\n{}\nstderr:\n{}", all.stdout, all.stderr);
+    assert!(all.stdout.contains("Code/bad.md:2: frontmatter"), "stdout:\n{}", all.stdout);
+    assert!(!all.stdout.contains("proj/"), "proj reported:\n{}", all.stdout);
+    assert!(!all.stdout.contains("wt/"), "wt reported:\n{}", all.stdout);
+    assert!(all.stderr.contains("proj") && all.stderr.contains("(git repo)"), "stderr:\n{}", all.stderr);
+    assert!(all.stderr.contains("wt") && all.stderr.contains("(git repo)"), "stderr:\n{}", all.stderr);
+    let one = run(d, &["schema.md", "Kitchen/wt/n.md"]);
+    assert_eq!(one.code, 0, "stdout:\n{}\nstderr:\n{}", one.stdout, one.stderr);
+    assert!(one.stderr.contains("skipped Kitchen/wt/n.md (git repo)"), "stderr:\n{}", one.stderr);
 }
