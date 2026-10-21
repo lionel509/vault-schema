@@ -639,3 +639,22 @@ fn breaker_sigpipe_does_not_panic() {
     let st = child.wait().unwrap();
     assert_ne!(st.code(), Some(101), "panicked on a closed stdout");
 }
+
+#[test]
+fn symlink_args_never_resolve_into_excluded() {
+    let fx = fixture("symarg");
+    let d = &fx.0;
+    put(d, "schema.md", INVARIANT_SCHEMA);
+    put(d, "Private/deep/n.md", POISON);
+    put(d, "Kitchen/ok.md", GOOD_RECIPE);
+    symlink("../Private/deep/n.md", d.join("Kitchen/link.md")).unwrap();
+    symlink("../Private", d.join("Kitchen/linkdir")).unwrap();
+    // Private is unreadable, so a resolve into it fails with permission denied.
+    fs::set_permissions(d.join("Private"), fs::Permissions::from_mode(0o000)).unwrap();
+    for arg in ["Kitchen/link.md", "Kitchen/linkdir", "Kitchen/linkdir/deep/n.md"] {
+        let o = run(d, &["schema.md", arg]);
+        assert_eq!(o.code, 0, "arg {arg:?}: stdout:\n{}\nstderr:\n{}", o.stdout, o.stderr);
+        assert!(o.stderr.contains("skipped"), "arg {arg:?}: stderr:\n{}", o.stderr);
+        assert!(!o.stderr.contains("cannot resolve"), "arg {arg:?} resolved:\n{}", o.stderr);
+    }
+}
