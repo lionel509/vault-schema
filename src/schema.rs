@@ -176,6 +176,7 @@ pub fn load(path: &Path) -> Result<Schema, String> {
         let types = types
             .filter(|t| !t.is_empty())
             .ok_or_else(|| format!("schema: {where_} needs non-empty types"))?;
+        let domain = domain.into_iter().map(|d| d.to_lowercase()).collect();
         scopes.push(Scope { path: lc(&path), domain, max_topic: scope_max, types });
     }
 

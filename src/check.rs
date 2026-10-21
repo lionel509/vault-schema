@@ -138,9 +138,9 @@ pub fn check_note(t: &Target, text: &str, s: &Schema) -> Vec<Problem> {
                         Yaml::String(x) => match x.strip_prefix('#') {
                             Some(rest) => {
                                 push(&mut out, t, tags_line, "tags", format!("\"{x}\": drop the #"), "tags");
-                                tv.push(rest.to_string());
+                                tv.push(rest.to_lowercase());
                             }
-                            None => tv.push(x.clone()),
+                            None => tv.push(x.to_lowercase()),
                         },
                         other => push(&mut out, t, tags_line, "tags", format!("{}: not a string", show(other)), "tags"),
                     }
@@ -161,7 +161,9 @@ pub fn check_note(t: &Target, text: &str, s: &Schema) -> Vec<Problem> {
         } else if let Some(tv) = &tags {
             let in_domain = |x: &String| sc.domain.iter().any(|d| d == x);
             let type_names: Vec<&str> = sc.types.iter().map(|(n, _)| n.as_str()).collect();
-            let in_types = |x: &String| type_names.contains(&x.as_str());
+            // Tags are lowercased above; type names are compared lowercased but
+            // keep their declared spelling for messages and the field lookup.
+            let in_types = |x: &String| sc.types.iter().any(|(n, _)| n.to_lowercase() == *x);
 
             let domain_hits: Vec<&String> = tv.iter().filter(|x| in_domain(x)).collect();
             match domain_hits.len() {
@@ -173,7 +175,7 @@ pub fn check_note(t: &Target, text: &str, s: &Schema) -> Vec<Problem> {
             let type_hits: Vec<&String> = tv.iter().filter(|x| in_types(x)).collect();
             match type_hits.len() {
                 0 => push(&mut out, t, tags_line, "tags", format!("no content-type tag (one of: {})", type_names.join(", ")), "tags"),
-                1 => content_type = type_names.iter().copied().find(|n| *n == type_hits[0].as_str()),
+                1 => content_type = type_names.iter().copied().find(|n| n.to_lowercase() == type_hits[0].as_str()),
                 n => push(&mut out, t, tags_line, "tags", format!("{n} content-type tags ({}), want 1", join(&type_hits)), "tags"),
             }
 
