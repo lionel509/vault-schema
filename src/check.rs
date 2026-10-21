@@ -20,11 +20,17 @@ fn push(out: &mut Vec<Problem>, t: &Target, line: usize, field: &str, msg: Strin
     out.push(Problem { path: t.display.clone(), line, field: field.to_string(), msg, kind });
 }
 
-/// File line of the first frontmatter line that starts with `<key>:`.
+/// File line of the first frontmatter line that starts with `<key>:`, where
+/// the key may be quoted and may have spaces before the colon.
 /// `fm` holds the frontmatter lines, which start at file line 2.
 fn key_line(fm: &[&str], key: &str) -> usize {
+    let forms = [key.to_string(), format!("\"{key}\""), format!("'{key}'")];
     fm.iter()
-        .position(|l| l.strip_prefix(key).is_some_and(|r| r.starts_with(':')))
+        .position(|l| {
+            forms.iter().any(|k| {
+                l.strip_prefix(k.as_str()).is_some_and(|r| r.trim_start_matches(' ').starts_with(':'))
+            })
+        })
         .map_or(1, |i| i + 2)
 }
 
