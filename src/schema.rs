@@ -190,6 +190,13 @@ pub fn load(path: &Path) -> Result<Schema, String> {
             .filter(|t| !t.is_empty())
             .ok_or_else(|| format!("schema: {where_} needs non-empty types"))?;
         let domain: Vec<String> = domain.into_iter().map(|d| d.to_lowercase()).collect();
+        // A stray space would make a topic that can never match its tag. Reject it
+        // rather than let it pass silently.
+        for raw in &topics {
+            if raw.trim() != raw || norm_tag(raw).is_empty() {
+                return Err(format!("schema: topic \"{raw}\" in {where_} is empty or has leading/trailing spaces"));
+            }
+        }
         let topics: Vec<String> = topics.iter().map(|t| norm_tag(t)).collect();
         for t in &topics {
             let is_type = types.iter().any(|(n, _)| n.to_lowercase() == *t);
