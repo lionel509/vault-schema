@@ -1,0 +1,9 @@
+[package]
+name = "vault-schema"
+version = "0.1.0"
+edition = "2024"
+description = "Checks Obsidian note frontmatter against a schema note"
+license = "MIT"
+publish = false
+
+[dependencies]
