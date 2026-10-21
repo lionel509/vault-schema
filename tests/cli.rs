@@ -658,3 +658,35 @@ fn symlink_args_never_resolve_into_excluded() {
         assert!(!o.stderr.contains("cannot resolve"), "arg {arg:?} resolved:\n{}", o.stderr);
     }
 }
+
+#[test]
+fn breaker_fifo_named_md_does_not_hang() {
+    // An explicit argument that is a FIFO named *.md used to block forever in read.
+    let fx = fixture("fifo");
+    let d = &fx.0;
+    put(d, "schema.md", SCHEMA);
+    fs::create_dir_all(d.join("Kitchen")).unwrap();
+    let st = Command::new("mkfifo").arg(d.join("Kitchen/Pipe.md")).status().unwrap();
+    assert!(st.success());
+    let mut child = Command::new(bin())
+        .current_dir(d)
+        .env("PWD", d)
+        .args(["schema.md", "Kitchen/Pipe.md"])
+        .stdout(std::process::Stdio::piped())
+        .stderr(std::process::Stdio::piped())
+        .spawn()
+        .expect("spawn vault-schema");
+    let start = std::time::Instant::now();
+    let finished = loop {
+        if child.try_wait().unwrap().is_some() {
+            break true;
+        }
+        if start.elapsed() > std::time::Duration::from_secs(10) {
+            let _ = child.kill();
+            let _ = child.wait();
+            break false;
+        }
+        std::thread::sleep(std::time::Duration::from_millis(20));
+    };
+    assert!(finished, "hung reading a FIFO named *.md");
+}
