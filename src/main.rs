@@ -18,7 +18,7 @@ use check::Problem;
 const KINDS: [&str; 6] = ["yaml", "tags", "required", "value", "synonym", "io"];
 
 fn main() -> ExitCode {
-    let args: Vec<String> = std::env::args().skip(1).collect();
+    let args: Vec<std::ffi::OsString> = std::env::args_os().skip(1).collect();
     if args.len() < 2 {
         eprintln!("usage: vault-schema <schema.md> <path>...");
         return ExitCode::from(2);
@@ -35,7 +35,7 @@ fn main() -> ExitCode {
     let mut targets = Vec::new();
     let mut problems: Vec<Problem> = Vec::new();
     for arg in &args[1..] {
-        if let Err(e) = walk::collect(arg, &schema, &mut targets, &mut problems) {
+        if let Err(e) = walk::collect(Path::new(arg), &schema, &mut targets, &mut problems) {
             eprintln!("vault-schema: {e}");
             return ExitCode::from(2);
         }

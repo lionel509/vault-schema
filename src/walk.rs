@@ -66,12 +66,13 @@ fn io_problem(path: &Path, field: &str, msg: String) -> Problem {
 /// Resolves one argument and adds the notes under it to `out`.
 /// An Err means the argument is unusable and the run must exit 2.
 pub fn collect(
-    arg: &str,
+    arg: &Path,
     s: &Schema,
     out: &mut Vec<Target>,
     problems: &mut Vec<Problem>,
 ) -> Result<(), String> {
-    let typed = PathBuf::from(arg);
+    let shown = arg.display();
+    let typed = arg.to_path_buf();
     let cwd = logical_cwd()?;
 
     // Lexical check first: no filesystem call at all.
@@ -79,7 +80,7 @@ pub fn collect(
     if let Some(rel) = rel_if_inside(&lc(&abs), s)
         && skipped(&rel, s)
     {
-        eprintln!("vault-schema: skipped {arg} (excluded)");
+        eprintln!("vault-schema: skipped {shown} (excluded)");
         return Ok(());
     }
 
@@ -92,17 +93,17 @@ pub fn collect(
         for (i, c) in abs.components().enumerate() {
             cur.push(c);
             if i >= depth && fs::symlink_metadata(&cur).is_ok_and(|m| m.file_type().is_symlink()) {
-                eprintln!("vault-schema: skipped {arg} (symlink)");
+                eprintln!("vault-schema: skipped {shown} (symlink)");
                 return Ok(());
             }
         }
     }
 
-    let canon = fs::canonicalize(&typed).map_err(|e| format!("cannot resolve {arg}: {e}"))?;
+    let canon = fs::canonicalize(&typed).map_err(|e| format!("cannot resolve {shown}: {e}"))?;
     let rel = strip(&lc(&canon), &s.root_canon)
-        .ok_or_else(|| format!("{arg} is outside the schema root {}", s.root_disp))?;
+        .ok_or_else(|| format!("{shown} is outside the schema root {}", s.root_disp))?;
     if skipped(&rel, s) {
-        eprintln!("vault-schema: skipped {arg} (excluded)");
+        eprintln!("vault-schema: skipped {shown} (excluded)");
         return Ok(());
     }
 
@@ -113,12 +114,12 @@ pub fn collect(
     for dir in chain {
         let Ok(r) = dir.strip_prefix(&s.root_real) else { continue };
         if !r.as_os_str().is_empty() && is_nested_repo(dir, &lc(r), s) {
-            eprintln!("vault-schema: skipped {arg} (git repo)");
+            eprintln!("vault-schema: skipped {shown} (git repo)");
             return Ok(());
         }
     }
 
-    let meta = fs::metadata(&canon).map_err(|e| format!("cannot resolve {arg}: {e}"))?;
+    let meta = fs::metadata(&canon).map_err(|e| format!("cannot resolve {shown}: {e}"))?;
     if meta.is_dir() {
         walk_dir(&canon, &rel, &typed, s, out, problems);
     } else if meta.is_file() && is_md(&canon) {
