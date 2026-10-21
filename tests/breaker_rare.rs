@@ -129,3 +129,22 @@ fn breaker_topic_with_stray_space_does_not_go_silently_rare() {
         o.stderr
     );
 }
+
+/// An unreadable sub-folder inside the scope is a walk problem. It must not
+/// fail a clean note, and the scope's counts must not claim a problem.
+#[test]
+fn rare_count_ignores_unreadable_subfolder() {
+    let fx = fixture("subfolder-locked");
+    let d = &fx.0;
+    put(d, "schema.md", &schema("2", ""));
+    put(d, "vault/Kitchen/Soup.md", "---\ntags: [kitchen, recipe, pasta]\n---\n");
+    put(d, "vault/Kitchen/Clean.md", "---\ntags: [kitchen, recipe, pasta]\n---\n");
+    put(d, "vault/Kitchen/Locked/x.md", "---\ntags: [kitchen, recipe]\n---\n");
+    let locked = d.join("vault/Kitchen/Locked");
+    fs::set_permissions(&locked, fs::Permissions::from_mode(0o000)).unwrap();
+    let o = run(d, &["schema.md", "vault/Kitchen/Soup.md"]);
+    fs::set_permissions(&locked, fs::Permissions::from_mode(0o755)).unwrap();
+    assert_eq!(o.code, 0, "stdout:\n{}\nstderr:\n{}", o.stdout, o.stderr);
+    assert!(!o.stdout.contains("Locked"), "stdout:\n{}", o.stdout);
+    assert!(!o.stdout.contains("io"), "stdout:\n{}", o.stdout);
+}
