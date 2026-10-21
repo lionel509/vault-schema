@@ -61,7 +61,7 @@ fn main() -> ExitCode {
     let total = targets.len();
     let texts: Vec<io::Result<String>> = targets.iter().map(|t| fs::read_to_string(&t.path)).collect();
     // Rare tags are judged against every note in the scope, not only the targets.
-    let tally = rare::count(&targets, &texts, &schema, &mut problems);
+    let tally = rare::count(&targets, &texts, &schema);
 
     let mut bad_notes = 0;
     for (t, read) in targets.iter().zip(&texts) {

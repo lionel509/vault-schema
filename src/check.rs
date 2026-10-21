@@ -97,22 +97,26 @@ fn kind_mismatch(k: Kind, v: &Yaml) -> Option<String> {
 }
 
 /// A note's tags as the tag rules read them (one leading `#` dropped, lowercased,
-/// duplicates removed), and the file line of its `tags` key. None when the
-/// frontmatter is missing or invalid, or has no list of tags.
-pub fn note_tags(text: &str) -> Option<(Vec<String>, usize)> {
+/// duplicates removed), and the file line of its `tags` key. `Ok(None)` when
+/// the note has no tags to read (no frontmatter, no `tags` list, or an empty
+/// block). `Err(())` when the frontmatter is broken, so the tags are unknown.
+pub fn note_tags(text: &str) -> Result<Option<(Vec<String>, usize)>, ()> {
     let text = text.strip_prefix('\u{feff}').unwrap_or(text);
     let lines: Vec<&str> = text.lines().collect();
     if lines.first() != Some(&"---") {
-        return None;
+        return Ok(None);
     }
-    let close = lines.iter().skip(1).position(|l| *l == "---")? + 1;
+    let close = lines.iter().skip(1).position(|l| *l == "---").ok_or(())? + 1;
     let fm_lines = &lines[1..close];
-    let docs = YamlLoader::load_from_str(&fm_lines.join("\n")).ok()?;
-    let Some(Yaml::Hash(fm)) = docs.into_iter().next() else {
-        return None;
+    let docs = YamlLoader::load_from_str(&fm_lines.join("\n")).map_err(|_| ())?;
+    let Some(first) = docs.into_iter().next() else {
+        return Ok(None);
     };
-    let Yaml::Array(items) = field(&fm, "tags")? else {
-        return None;
+    let Yaml::Hash(fm) = first else {
+        return Err(());
+    };
+    let Some(Yaml::Array(items)) = field(&fm, "tags") else {
+        return Ok(None);
     };
     let mut tags: Vec<String> = Vec::new();
     for item in items {
@@ -123,7 +127,7 @@ pub fn note_tags(text: &str) -> Option<(Vec<String>, usize)> {
             }
         }
     }
-    Some((tags, key_line(fm_lines, "tags")))
+    Ok(Some((tags, key_line(fm_lines, "tags"))))
 }
 
 pub fn check_note(t: &Target, text: &str, s: &Schema) -> Vec<Problem> {
