@@ -967,13 +967,14 @@ fn rare_schema_errors_exit_2() {
     let fx = fixture("rare-schema-err");
     let d = &fx.0;
     put(d, "Kitchen/x.md", GOOD_RECIPE);
-    let cases: [(&str, &str, &str); 6] = [
+    let cases: [(&str, &str, &str); 7] = [
         ("zero.md", "min_uses: 0", "min_uses"),
         ("negative.md", "min_uses: -1", "min_uses"),
         ("fraction.md", "min_uses: 2.5", "min_uses"),
         ("text.md", "min_uses: many", "min_uses"),
         ("domain-topic.md", "min_uses: 3\n    topics: [kitchen]", "also a domain or type tag"),
         ("type-topic.md", "min_uses: 3\n    topics: [Recipe]", "also a domain or type tag"),
+        ("space-topic.md", "min_uses: 2\n    topics: [\"noodles \"]", "topic"),
     ];
     for (file, body, want) in cases {
         let text = format!(
@@ -986,4 +987,21 @@ fn rare_schema_errors_exit_2() {
         assert!(o.stderr.contains("vault-schema: schema:"), "{file}: stderr:\n{}", o.stderr);
         assert!(o.stderr.contains(want), "{file}: want {want:?}, stderr:\n{}", o.stderr);
     }
+}
+
+#[test]
+fn rare_nested_scope_notes_do_not_count_for_parent() {
+    // The parent scope counts only its own notes; K.md belongs to the child scope.
+    let fx = fixture("rare-nested");
+    let d = &fx.0;
+    put(d, "schema.md", "# Nested\n\n```yaml\nroot: .\nscopes:\n  vault:\n    domain: [kitchen, bakery]\n    min_uses: 2\n    types:\n      recipe: {}\n      reference: {}\n  vault/Kitchen:\n    domain: [kitchen, bakery]\n    types:\n      recipe: {}\n      reference: {}\n```\n");
+    put(d, "vault/P.md", "---\ntags: [kitchen, recipe, zesty]\n---\n");
+    put(d, "vault/Kitchen/K.md", "---\ntags: [kitchen, recipe, zesty]\n---\n");
+    let o = run(d, &["schema.md", "vault/P.md"]);
+    assert_eq!(o.code, 1, "stdout:\n{}\nstderr:\n{}", o.stdout, o.stderr);
+    assert!(
+        o.stdout.contains("vault/P.md:2: tags: \"zesty\" is used by 1 note and isn't in the topic list"),
+        "stdout:\n{}",
+        o.stdout
+    );
 }
