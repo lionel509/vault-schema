@@ -77,8 +77,10 @@ struct Out {
 }
 
 fn run(dir: &Path, args: &[&str]) -> Out {
+    // A shell sets PWD on cd, so the child sees the logical path it was started in.
     let o = Command::new(bin())
         .current_dir(dir)
+        .env("PWD", dir)
         .args(args)
         .output()
         .expect("spawn vault-schema");
@@ -463,7 +465,7 @@ fn single_file_arg() {
     assert_eq!(last_line(&ok.stdout), "vault-schema: 0 problems in 1 notes");
     let bad = run(d, &["schema.md", "Kitchen/bad.md"]);
     assert_eq!(bad.code, 1, "stdout:\n{}", bad.stdout);
-    assert!(bad.stdout.contains("bad.md:3: frontmatter: invalid YAML"), "stdout:\n{}", bad.stdout);
+    assert!(bad.stdout.contains("bad.md:2: frontmatter: invalid YAML"), "stdout:\n{}", bad.stdout);
     assert!(!bad.stdout.contains("good.md"), "stdout:\n{}", bad.stdout);
     assert_eq!(last_line(&bad.stdout), "vault-schema: 1 problems in 1 of 1 notes (yaml 1)");
 }
@@ -540,7 +542,7 @@ fn exclude_is_relative_to_root() {
     put(&vault, "Kitchen/bad.md", POISON);
     let rel = run(&vault, &["schema.md", "Kitchen"]);
     assert_eq!(rel.code, 1, "stdout:\n{}\nstderr:\n{}", rel.stdout, rel.stderr);
-    assert!(rel.stdout.contains("bad.md:3: frontmatter: invalid YAML"), "stdout:\n{}", rel.stdout);
+    assert!(rel.stdout.contains("bad.md:2: frontmatter: invalid YAML"), "stdout:\n{}", rel.stdout);
     let schema_abs = vault.join("schema.md");
     let note_abs = vault.join("Kitchen/bad.md");
     let abs = run(

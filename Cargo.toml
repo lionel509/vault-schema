@@ -7,3 +7,4 @@ license = "MIT"
 publish = false
 
 [dependencies]
+yaml-rust2 = "0.13"
