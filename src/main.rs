@@ -7,6 +7,7 @@ mod check;
 mod schema;
 mod walk;
 
+use std::collections::HashSet;
 use std::fs;
 use std::io::{self, BufWriter, Write};
 use std::path::Path;
@@ -40,6 +41,10 @@ fn main() -> ExitCode {
             return ExitCode::from(2);
         }
     }
+    // Overlapping arguments (a folder and a note in it) name a note twice.
+    // Keep the first occurrence, in argument order.
+    let mut seen = HashSet::new();
+    targets.retain(|t| seen.insert(t.path.clone()));
 
     let total = targets.len();
     let mut bad_notes = 0;
