@@ -747,3 +747,17 @@ fn breaker_line_number_for_quoted_key() {
     let o = run(d, &["schema.md", "Kitchen"]);
     assert!(o.stdout.contains("Qk.md:4: status:"), "wrong line:\n{}", o.stdout);
 }
+
+#[test]
+fn breaker_overlapping_args_report_each_note_once() {
+    // A folder and a note inside it: the note is checked once.
+    let fx = fixture("overlap");
+    let d = &fx.0;
+    put(d, "schema.md", SCHEMA);
+    put(d, "Kitchen/Soup.md", GOOD_RECIPE);
+    put(d, "Kitchen/Bad.md", "---\ntags: [kitchen, recipe]\ncreated: 2026-10-01\nstatus: nope\n---\n");
+    let o = run(d, &["schema.md", "Kitchen", "Kitchen/Bad.md"]);
+    let hits = o.stdout.lines().filter(|l| l.contains(": status:")).count();
+    assert_eq!(hits, 1, "one bad note printed {hits} times:\n{}", o.stdout);
+    assert_eq!(last_line(&o.stdout), "vault-schema: 1 problems in 1 of 2 notes (value 1)");
+}
