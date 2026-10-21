@@ -306,6 +306,13 @@ fn parse_types(v: &Yaml, scope: &str) -> Result<Types, String> {
     let mut out: Types = Vec::new();
     for (tk, tv) in as_map(v, &format!("types in scope {scope}"))?.iter() {
         let tname = key(tk)?.to_string();
+        // A type name is a tag, and a real tag holds only these characters.
+        // Any other character would make the type match no note at all.
+        if tname.is_empty() || tname.chars().any(|c| !(c.is_alphanumeric() || matches!(c, '_' | '-' | '/'))) {
+            return Err(format!(
+                "schema: type name {tname:?} in scope {scope} must be a tag (letters, digits, _, - or /)"
+            ));
+        }
         // Tags match case-insensitively, so two type names that differ only
         // by case would both match one tag.
         if let Some((prev, _)) = out.iter().find(|(t, _)| t.to_lowercase() == tname.to_lowercase()) {
