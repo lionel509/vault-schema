@@ -10,6 +10,9 @@ behind unnoticed.
 
 Each `<path>` is a note or a folder. Folders are walked. Excluded folders are
 never opened, listed or stat'ed, whichever spelling the path uses.
+A path argument that goes through a symlink inside the root is skipped and named
+on stderr. An argument spelled through a symlink outside the root is still
+resolved with `canonicalize`.
 
 Output is one line per problem, `path:line: field: message`, then a summary:
 

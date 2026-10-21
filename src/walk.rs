@@ -83,6 +83,21 @@ pub fn collect(
         return Ok(());
     }
 
+    // Arguments never follow a symlink on the way down. The prefixes below the
+    // root are not excluded (the check above passed), so nothing inside an
+    // excluded folder is stat'ed here.
+    if let Some(rel) = rel_if_inside(&lc(&abs), s) {
+        let depth = abs.components().count() - rel.components().count();
+        let mut cur = PathBuf::new();
+        for (i, c) in abs.components().enumerate() {
+            cur.push(c);
+            if i >= depth && fs::symlink_metadata(&cur).is_ok_and(|m| m.file_type().is_symlink()) {
+                eprintln!("vault-schema: skipped {arg} (symlink)");
+                return Ok(());
+            }
+        }
+    }
+
     let canon = fs::canonicalize(&typed).map_err(|e| format!("cannot resolve {arg}: {e}"))?;
     let rel = strip(&lc(&canon), &s.root_canon)
         .ok_or_else(|| format!("{arg} is outside the schema root {}", s.root_disp))?;
