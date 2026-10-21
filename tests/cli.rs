@@ -776,3 +776,20 @@ fn breaker_scopes_differing_only_by_case_are_a_schema_error() {
     assert_eq!(o.code, 2, "two scopes for one folder accepted:\n{}", o.stdout);
     assert!(o.stderr.contains("name the same folder"), "stderr:\n{}", o.stderr);
 }
+
+#[test]
+fn date_must_exist() {
+    let fx = fixture("realdate");
+    let d = &fx.0;
+    put(d, "schema.md", SCHEMA);
+    for (i, date) in ["2026-02-31", "2026-04-31", "2026-01-32", "2025-02-29"].iter().enumerate() {
+        put(d, &format!("Kitchen/bad{i}.md"), &format!("---\ntags: [kitchen, recipe]\ncreated: {date}\nstatus: made\n---\n"));
+    }
+    put(d, "Kitchen/ok1.md", "---\ntags: [kitchen, recipe]\ncreated: 2024-02-29\nstatus: made\n---\n");
+    put(d, "Kitchen/ok2.md", "---\ntags: [kitchen, recipe]\ncreated: 2026-12-31\nstatus: made\n---\n");
+    let o = run(d, &["schema.md", "Kitchen"]);
+    for date in ["2026-02-31", "2026-04-31", "2026-01-32", "2025-02-29"] {
+        assert!(o.stdout.contains(&format!("\"{date}\" is not a YYYY-MM-DD date")), "{date} accepted:\n{}", o.stdout);
+    }
+    assert!(!o.stdout.contains("ok1.md") && !o.stdout.contains("ok2.md"), "valid dates flagged:\n{}", o.stdout);
+}
