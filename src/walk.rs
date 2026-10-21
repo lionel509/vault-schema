@@ -80,7 +80,7 @@ pub fn collect(
     if let Some(rel) = rel_if_inside(&lc(&abs), s)
         && skipped(&rel, s)
     {
-        eprintln!("vault-schema: skipped {shown} (excluded)");
+        say!("vault-schema: skipped {shown} (excluded)");
         return Ok(());
     }
 
@@ -93,7 +93,7 @@ pub fn collect(
         for (i, c) in abs.components().enumerate() {
             cur.push(c);
             if i >= depth && fs::symlink_metadata(&cur).is_ok_and(|m| m.file_type().is_symlink()) {
-                eprintln!("vault-schema: skipped {shown} (symlink)");
+                say!("vault-schema: skipped {shown} (symlink)");
                 return Ok(());
             }
         }
@@ -103,7 +103,7 @@ pub fn collect(
     let rel = strip(&lc(&canon), &s.root_canon)
         .ok_or_else(|| format!("{shown} is outside the schema root {}", s.root_disp))?;
     if skipped(&rel, s) {
-        eprintln!("vault-schema: skipped {shown} (excluded)");
+        say!("vault-schema: skipped {shown} (excluded)");
         return Ok(());
     }
 
@@ -114,7 +114,7 @@ pub fn collect(
     for dir in chain {
         let Ok(r) = dir.strip_prefix(&s.root_real) else { continue };
         if !r.as_os_str().is_empty() && is_nested_repo(dir, &lc(r), s) {
-            eprintln!("vault-schema: skipped {shown} (git repo)");
+            say!("vault-schema: skipped {shown} (git repo)");
             return Ok(());
         }
     }
@@ -171,7 +171,7 @@ fn walk_dir(
         }
         if ft.is_dir() {
             if is_nested_repo(&ent.path(), &child_rel, s) {
-                eprintln!("vault-schema: skipped {} (git repo)", child_display.display());
+                say!("vault-schema: skipped {} (git repo)", child_display.display());
                 continue;
             }
             walk_dir(&ent.path(), &child_rel, &child_display, s, out, problems);

@@ -3,6 +3,17 @@
 //! Usage: vault-schema <schema.md> <path>...
 //! Exit: 0 clean, 1 problems found, 2 usage or schema error.
 
+/// Writes one line to stderr. Unlike `eprintln!`, a closed stderr (`| head -1`)
+/// does not panic: the exit code the run computed still stands.
+macro_rules! say {
+    ($($arg:tt)*) => {
+        let _ = std::io::Write::write_fmt(
+            &mut std::io::stderr(),
+            format_args!("{}\n", format_args!($($arg)*)),
+        );
+    };
+}
+
 mod check;
 mod schema;
 mod walk;
@@ -21,13 +32,13 @@ const KINDS: [&str; 6] = ["yaml", "tags", "required", "value", "synonym", "io"];
 fn main() -> ExitCode {
     let args: Vec<std::ffi::OsString> = std::env::args_os().skip(1).collect();
     if args.len() < 2 {
-        eprintln!("usage: vault-schema <schema.md> <path>...");
+        say!("usage: vault-schema <schema.md> <path>...");
         return ExitCode::from(2);
     }
     let schema = match schema::load(Path::new(&args[0])) {
         Ok(s) => s,
         Err(e) => {
-            eprintln!("vault-schema: {e}");
+            say!("vault-schema: {e}");
             return ExitCode::from(2);
         }
     };
@@ -37,7 +48,7 @@ fn main() -> ExitCode {
     let mut problems: Vec<Problem> = Vec::new();
     for arg in &args[1..] {
         if let Err(e) = walk::collect(Path::new(arg), &schema, &mut targets, &mut problems) {
-            eprintln!("vault-schema: {e}");
+            say!("vault-schema: {e}");
             return ExitCode::from(2);
         }
     }
