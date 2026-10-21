@@ -725,3 +725,25 @@ fn breaker_values_check_ignores_a_null_list_item() {
     let o = run(d, &["schema.md", "Kitchen"]);
     assert_eq!(o.code, 1, "a null list item passed a values list:\n{}", o.stdout);
 }
+
+#[test]
+fn breaker_line_number_for_spaced_colon_key() {
+    // `status : nope` is valid YAML and is on file line 4.
+    let fx = fixture("spaced");
+    let d = &fx.0;
+    put(d, "schema.md", SCHEMA);
+    put(d, "Kitchen/Sp.md", "---\ntags: [kitchen, recipe]\ncreated: 2026-10-01\nstatus : nope\n---\n");
+    let o = run(d, &["schema.md", "Kitchen"]);
+    assert!(o.stdout.contains("Sp.md:4: status:"), "wrong line:\n{}", o.stdout);
+}
+
+#[test]
+fn breaker_line_number_for_quoted_key() {
+    // `"status": nope` is valid YAML and is on file line 4.
+    let fx = fixture("quotedkey");
+    let d = &fx.0;
+    put(d, "schema.md", SCHEMA);
+    put(d, "Kitchen/Qk.md", "---\ntags: [kitchen, recipe]\ncreated: 2026-10-01\n\"status\": nope\n---\n");
+    let o = run(d, &["schema.md", "Kitchen"]);
+    assert!(o.stdout.contains("Qk.md:4: status:"), "wrong line:\n{}", o.stdout);
+}
