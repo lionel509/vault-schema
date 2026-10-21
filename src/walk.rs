@@ -121,7 +121,7 @@ pub fn collect(
     let meta = fs::metadata(&canon).map_err(|e| format!("cannot resolve {arg}: {e}"))?;
     if meta.is_dir() {
         walk_dir(&canon, &rel, &typed, s, out, problems);
-    } else if is_md(&canon) {
+    } else if meta.is_file() && is_md(&canon) {
         out.push(Target { display: typed, path: canon, rel_lc: rel });
     }
     Ok(())
