@@ -121,20 +121,23 @@ pub fn collect(
 
     let meta = fs::metadata(&canon).map_err(|e| format!("cannot resolve {shown}: {e}"))?;
     if meta.is_dir() {
-        walk_dir(&canon, &rel, &typed, s, out, problems);
+        walk_dir(&canon, &rel, &typed, s, out, problems, true);
     } else if meta.is_file() && is_md(&canon) {
         out.push(Target { display: typed, path: canon, rel_lc: rel });
     }
     Ok(())
 }
 
-fn walk_dir(
+/// Adds the notes under a folder to `out`. `say_skips` turns on the stderr
+/// notice for each nested repo skipped; the rare-tag count walk turns it off.
+pub fn walk_dir(
     dir: &Path,
     rel: &Path,
     display: &Path,
     s: &Schema,
     out: &mut Vec<Target>,
     problems: &mut Vec<Problem>,
+    say_skips: bool,
 ) {
     let rd = match fs::read_dir(dir) {
         Ok(rd) => rd,
@@ -171,10 +174,12 @@ fn walk_dir(
         }
         if ft.is_dir() {
             if is_nested_repo(&ent.path(), &child_rel, s) {
-                say!("vault-schema: skipped {} (git repo)", child_display.display());
+                if say_skips {
+                    say!("vault-schema: skipped {} (git repo)", child_display.display());
+                }
                 continue;
             }
-            walk_dir(&ent.path(), &child_rel, &child_display, s, out, problems);
+            walk_dir(&ent.path(), &child_rel, &child_display, s, out, problems, say_skips);
         } else if ft.is_file() && is_md(Path::new(&name)) {
             out.push(Target { display: child_display, path: ent.path(), rel_lc: child_rel });
         }

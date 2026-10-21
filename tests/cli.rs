@@ -904,7 +904,7 @@ fn rare_fixture(name: &str) -> Fx {
     let fx = fixture(name);
     let d = &fx.0;
     put(d, "schema.md", RARE_SCHEMA);
-    // zesty: a, b (b names it twice and once with a #, still one note each) = 2 notes.
+    // zesty: a and b (b names it twice, still one note) = 2 notes.
     put(d, "Kitchen/a.md", "---\ntags: [kitchen, recipe, zesty, pasta]\n---\n");
     put(d, "Kitchen/b.md", "---\ntags: [kitchen, recipe, zesty, zesty, \"#Hearty\"]\n---\n");
     // hearty: b (via #Hearty), c, d = 3 notes, so it is clean everywhere.

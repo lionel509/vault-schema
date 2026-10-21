@@ -5,7 +5,7 @@ use std::path::PathBuf;
 use yaml_rust2::yaml::Hash;
 use yaml_rust2::{Yaml, YamlLoader};
 
-use crate::schema::{scalar_str, Field, Kind, Schema, Scope};
+use crate::schema::{norm_tag, scalar_str, scope_index, Field, Kind, Schema, Scope};
 use crate::walk::Target;
 
 pub struct Problem {
@@ -96,15 +96,41 @@ fn kind_mismatch(k: Kind, v: &Yaml) -> Option<String> {
     }
 }
 
+/// A note's tags as the tag rules read them (one leading `#` dropped, lowercased,
+/// duplicates removed), and the file line of its `tags` key. None when the
+/// frontmatter is missing or invalid, or has no list of tags.
+pub fn note_tags(text: &str) -> Option<(Vec<String>, usize)> {
+    let text = text.strip_prefix('\u{feff}').unwrap_or(text);
+    let lines: Vec<&str> = text.lines().collect();
+    if lines.first() != Some(&"---") {
+        return None;
+    }
+    let close = lines.iter().skip(1).position(|l| *l == "---")? + 1;
+    let fm_lines = &lines[1..close];
+    let docs = YamlLoader::load_from_str(&fm_lines.join("\n")).ok()?;
+    let Some(Yaml::Hash(fm)) = docs.into_iter().next() else {
+        return None;
+    };
+    let Yaml::Array(items) = field(&fm, "tags")? else {
+        return None;
+    };
+    let mut tags: Vec<String> = Vec::new();
+    for item in items {
+        if let Yaml::String(x) = item {
+            let t = norm_tag(x);
+            if !tags.contains(&t) {
+                tags.push(t);
+            }
+        }
+    }
+    Some((tags, key_line(fm_lines, "tags")))
+}
+
 pub fn check_note(t: &Target, text: &str, s: &Schema) -> Vec<Problem> {
     let mut out = Vec::new();
     let text = text.strip_prefix('\u{feff}').unwrap_or(text);
     let lines: Vec<&str> = text.lines().collect();
-    let scope: Option<&Scope> = s
-        .scopes
-        .iter()
-        .filter(|sc| t.rel_lc.starts_with(&sc.path))
-        .max_by_key(|sc| sc.path.components().count());
+    let scope: Option<&Scope> = scope_index(s, &t.rel_lc).map(|i| &s.scopes[i]);
 
     // Frontmatter: the block between two `---` lines at the top of the file.
     let mut fm_lines: Vec<&str> = Vec::new();

@@ -18,6 +18,10 @@ Output is one line per problem, `path:line: field: message`, then a summary:
 
     vault-schema: 4 problems in 3 of 5 notes (yaml 1, tags 2, synonym 1)
 
+A `rare` problem counts toward exit 1 like the others. Its counts cover the
+whole scope, so a single-file run reads the rest of the scope too (read-only,
+same exclusions, nothing reported for them).
+
 ## Exit codes
 
 - `0`: clean.
@@ -41,6 +45,11 @@ else in the file is for humans. Top-level keys:
   - `types`: non-empty map of content type to fields. Exactly one content-type
     tag per note. Declare `reference: {}` for a type with no fields.
   - `max_topic_tags`: optional override.
+  - `topics`: optional list of reviewed topic tags, the vault's registry. A tag
+    listed here is never `rare`.
+  - `min_uses`: optional positive integer. A topic tag on a note that is not in
+    `topics` and that fewer notes in the scope use is reported as `rare`. Domain
+    and content-type tags are never `rare`.
 
 Field spec keys: `required` (bool), `kind` (`date`, `number`, `list`, `string`),
 `values` (list of allowed scalars). Anything else is a schema error.
