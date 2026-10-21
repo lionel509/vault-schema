@@ -821,3 +821,19 @@ fn breaker_closed_stderr_does_not_panic_during_skip_messages() {
     let status = child.wait().expect("wait for vault-schema");
     assert_eq!(status.code(), Some(0), "stderr closed early and the run did not exit 0");
 }
+
+#[test]
+fn breaker_types_differing_only_by_case_are_a_schema_error() {
+    // recipe and Recipe match the same tag, so `find` would pick one silently.
+    let fx = fixture("typecase");
+    let d = &fx.0;
+    put(
+        d,
+        "schema.md",
+        "# Schema\n\n```yaml\nroot: .\nscopes:\n  Kitchen:\n    domain: [kitchen]\n    types:\n      recipe: {}\n      Recipe: {}\n```\n",
+    );
+    put(d, "Kitchen/a.md", "---\ntags: [kitchen, recipe]\n---\n");
+    let o = run(d, &["schema.md", "Kitchen"]);
+    assert_eq!(o.code, 2, "two types for one tag accepted:\n{}", o.stdout);
+    assert!(o.stderr.contains("recipe") && o.stderr.contains("Recipe"), "stderr:\n{}", o.stderr);
+}
