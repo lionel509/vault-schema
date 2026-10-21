@@ -25,6 +25,8 @@ pub struct Schema {
 }
 
 pub struct Scope {
+    /// The scope key as written in the schema, for messages.
+    pub name: String,
     /// Root-relative, normalised, lowercased.
     pub path: PathBuf,
     pub domain: Vec<String>,
@@ -154,10 +156,13 @@ pub fn load(path: &Path) -> Result<Schema, String> {
     if scopes_h.is_empty() {
         return Err("schema: scopes must not be empty".into());
     }
-    let mut scopes = Vec::new();
+    let mut scopes: Vec<Scope> = Vec::new();
     for (k, v) in scopes_h.iter() {
         let name = key(k)?;
         let path = rel_path(name, "scope path")?;
+        if let Some(prev) = scopes.iter().find(|s| s.path == lc(&path)) {
+            return Err(format!("schema: scope {} and {name} name the same folder", prev.name));
+        }
         let mut domain = None;
         let mut types = None;
         let mut scope_max = max_topic;
@@ -177,7 +182,7 @@ pub fn load(path: &Path) -> Result<Schema, String> {
             .filter(|t| !t.is_empty())
             .ok_or_else(|| format!("schema: {where_} needs non-empty types"))?;
         let domain = domain.into_iter().map(|d| d.to_lowercase()).collect();
-        scopes.push(Scope { path: lc(&path), domain, max_topic: scope_max, types });
+        scopes.push(Scope { name: name.to_string(), path: lc(&path), domain, max_topic: scope_max, types });
     }
 
     for (alias, _) in &synonyms {
