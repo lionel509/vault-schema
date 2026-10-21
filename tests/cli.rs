@@ -837,3 +837,31 @@ fn breaker_types_differing_only_by_case_are_a_schema_error() {
     assert_eq!(o.code, 2, "two types for one tag accepted:\n{}", o.stdout);
     assert!(o.stderr.contains("recipe") && o.stderr.contains("Recipe"), "stderr:\n{}", o.stderr);
 }
+
+fn r3_schema_with_types(types: &str) -> String {
+    format!("# Schema\n\n```yaml\nroot: .\nscopes:\n  Kitchen:\n    domain: [kitchen]\n    types:\n{types}```\n")
+}
+
+#[test]
+fn r3_type_names_must_be_tag_strings() {
+    // A name with a stray space or invisible character never matches a real
+    // tag, so its fields would be skipped without any error.
+    let cases = [
+        ("trail", "      recipe: {}\n      \"recipe \": {status: {required: true}}\n"),
+        ("lead", "      recipe: {}\n      \" recipe\": {status: {required: true}}\n"),
+        ("nbsp", "      recipe: {}\n      \"recipe\u{a0}\": {status: {required: true}}\n"),
+        ("zwsp", "      recipe: {}\n      \"\u{200b}recipe\": {status: {required: true}}\n"),
+        ("alone", "      \"recipe \": {}\n"),
+    ];
+    for (label, types) in cases {
+        let fx = fixture(&format!("r3type-{label}"));
+        let d = &fx.0;
+        put(d, "schema.md", &r3_schema_with_types(types));
+        put(d, "Kitchen/Soup.md", "---\ntags: [kitchen, recipe]\ncreated: 2026-10-01\n---\n# Soup\n");
+        let o = run(d, &["schema.md", "Kitchen"]);
+        assert_eq!(o.code, 2, "{label}: stdout:\n{}\nstderr:\n{}", o.stdout, o.stderr);
+        assert!(o.stdout.is_empty(), "{label}: stdout not empty:\n{}", o.stdout);
+        assert!(o.stderr.contains("vault-schema: schema:"), "{label}: stderr:\n{}", o.stderr);
+        assert!(o.stderr.contains("Kitchen"), "{label}: stderr:\n{}", o.stderr);
+    }
+}
