@@ -3,6 +3,7 @@
 
 use std::ffi::OsString;
 use std::fs;
+use std::os::unix::ffi::OsStringExt;
 use std::os::unix::fs::{PermissionsExt, symlink};
 use std::path::{Path, PathBuf};
 use std::process::Command;
@@ -689,4 +690,18 @@ fn breaker_fifo_named_md_does_not_hang() {
         std::thread::sleep(std::time::Duration::from_millis(20));
     };
     assert!(finished, "hung reading a FIFO named *.md");
+}
+
+#[test]
+fn breaker_non_utf8_argument_is_exit_2_not_a_panic() {
+    let fx = fixture("nonutf8");
+    let d = &fx.0;
+    put(d, "schema.md", SCHEMA);
+    let mut bad = b"Kitchen/".to_vec();
+    bad.push(0xff);
+    bad.extend_from_slice(b".md");
+    let o = run_os(d, vec![OsString::from("schema.md"), OsString::from_vec(bad)]);
+    // A panic exits 101. APFS refuses such a name, so exit 2 is the expected result.
+    assert_ne!(o.code, 101, "panicked on a non-UTF-8 argument:\n{}", o.stderr);
+    assert_ne!(o.code, -1, "killed by a signal:\n{}", o.stderr);
 }
