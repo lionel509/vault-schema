@@ -49,6 +49,7 @@ The longest matching scope path wins. Only global rules (synonyms, tag shape)
 apply outside every scope. `*.excalidraw.md` files are always skipped.
 A nested git repo or worktree (a folder holding `.git`) is skipped and named on
 stderr, unless it is the schema root, a scope folder, or an ancestor of one.
+Any `.git` entry, including a symlink, marks a nested repo; the link is never followed.
 
 ## Follow-ups (not in this version)
 
