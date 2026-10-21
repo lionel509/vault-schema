@@ -13,6 +13,8 @@ pub struct Schema {
     pub root_lex: PathBuf,
     /// Canonical root (symlinks resolved) and lowercased.
     pub root_canon: PathBuf,
+    /// Canonical root, original case, for filesystem access.
+    pub root_real: PathBuf,
     /// Root-relative, normalised, lowercased.
     pub exclude: Vec<PathBuf>,
     /// Folder names to skip at any depth, lowercased.
@@ -197,6 +199,7 @@ pub fn load(path: &Path) -> Result<Schema, String> {
         root_disp: root_abs.display().to_string(),
         root_lex: lc(&root_abs),
         root_canon: lc(&root_canon),
+        root_real: root_canon.clone(),
         exclude,
         skip_names,
         synonyms,

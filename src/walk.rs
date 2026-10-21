@@ -43,6 +43,18 @@ pub fn skipped(rel: &Path, s: &Schema) -> bool {
         .is_some_and(|f| f.to_string_lossy().ends_with(".excalidraw.md"))
 }
 
+/// True if a root-relative, lowercased folder is the schema root, a scope
+/// folder, or an ancestor of one. Those are walked even when they hold a repo.
+pub fn exempt(rel_lc: &Path, s: &Schema) -> bool {
+    rel_lc.as_os_str().is_empty() || s.scopes.iter().any(|sc| sc.path.starts_with(rel_lc))
+}
+
+/// True if a folder is a nested git repo or worktree (a `.git` dir or file)
+/// and is not exempt.
+fn is_nested_repo(dir: &Path, rel_lc: &Path, s: &Schema) -> bool {
+    !exempt(rel_lc, s) && fs::symlink_metadata(dir.join(".git")).is_ok()
+}
+
 fn is_md(p: &Path) -> bool {
     p.extension().is_some_and(|e| e.eq_ignore_ascii_case("md"))
 }
@@ -77,6 +89,18 @@ pub fn collect(
     if skipped(&rel, s) {
         eprintln!("vault-schema: skipped {arg} (excluded)");
         return Ok(());
+    }
+
+    // A nested repo (or worktree) on the way down is its own vault. Check
+    // from the root down, so the first repo found is the one named.
+    let mut chain: Vec<&Path> = canon.ancestors().take_while(|a| a.starts_with(&s.root_real)).collect();
+    chain.reverse();
+    for dir in chain {
+        let Ok(r) = dir.strip_prefix(&s.root_real) else { continue };
+        if !r.as_os_str().is_empty() && is_nested_repo(dir, &lc(r), s) {
+            eprintln!("vault-schema: skipped {arg} (git repo)");
+            return Ok(());
+        }
     }
 
     let meta = fs::metadata(&canon).map_err(|e| format!("cannot resolve {arg}: {e}"))?;
@@ -130,6 +154,10 @@ fn walk_dir(
             continue;
         }
         if ft.is_dir() {
+            if is_nested_repo(&ent.path(), &child_rel, s) {
+                eprintln!("vault-schema: skipped {} (git repo)", child_display.display());
+                continue;
+            }
             walk_dir(&ent.path(), &child_rel, &child_display, s, out, problems);
         } else if ft.is_file() && is_md(Path::new(&name)) {
             out.push(Target { display: child_display, path: ent.path(), rel_lc: child_rel });
