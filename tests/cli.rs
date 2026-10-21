@@ -705,3 +705,23 @@ fn breaker_non_utf8_argument_is_exit_2_not_a_panic() {
     assert_ne!(o.code, 101, "panicked on a non-UTF-8 argument:\n{}", o.stderr);
     assert_ne!(o.code, -1, "killed by a signal:\n{}", o.stderr);
 }
+
+#[test]
+fn breaker_values_check_ignores_a_mapping_value() {
+    let fx = fixture("valmap");
+    let d = &fx.0;
+    put(d, "schema.md", SCHEMA);
+    put(d, "Kitchen/m.md", "---\ntags: [kitchen, recipe]\ncreated: 2026-10-01\nstatus: {x: made}\n---\n");
+    let o = run(d, &["schema.md", "Kitchen"]);
+    assert_eq!(o.code, 1, "a mapping passed a values list:\n{}", o.stdout);
+}
+
+#[test]
+fn breaker_values_check_ignores_a_null_list_item() {
+    let fx = fixture("valnull");
+    let d = &fx.0;
+    put(d, "schema.md", SCHEMA);
+    put(d, "Kitchen/n.md", "---\ntags: [kitchen, recipe]\ncreated: 2026-10-01\nstatus: [made, ~]\n---\n");
+    let o = run(d, &["schema.md", "Kitchen"]);
+    assert_eq!(o.code, 1, "a null list item passed a values list:\n{}", o.stdout);
+}
