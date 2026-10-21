@@ -593,8 +593,8 @@ fn nested_git_repos_are_skipped() {
     assert!(all.stdout.contains("Code/bad.md:2: frontmatter"), "stdout:\n{}", all.stdout);
     assert!(!all.stdout.contains("proj/"), "proj reported:\n{}", all.stdout);
     assert!(!all.stdout.contains("wt/"), "wt reported:\n{}", all.stdout);
-    assert!(all.stderr.contains("proj") && all.stderr.contains("(git repo)"), "stderr:\n{}", all.stderr);
-    assert!(all.stderr.contains("wt") && all.stderr.contains("(git repo)"), "stderr:\n{}", all.stderr);
+    assert!(all.stderr.contains("vault-schema: skipped ./Kitchen/proj (git repo)"), "stderr:\n{}", all.stderr);
+    assert!(all.stderr.contains("vault-schema: skipped ./Kitchen/wt (git repo)"), "stderr:\n{}", all.stderr);
     let one = run(d, &["schema.md", "Kitchen/wt/n.md"]);
     assert_eq!(one.code, 0, "stdout:\n{}\nstderr:\n{}", one.stdout, one.stderr);
     assert!(one.stderr.contains("skipped Kitchen/wt/n.md (git repo)"), "stderr:\n{}", one.stderr);
@@ -864,4 +864,22 @@ fn r3_type_names_must_be_tag_strings() {
         assert!(o.stderr.contains("vault-schema: schema:"), "{label}: stderr:\n{}", o.stderr);
         assert!(o.stderr.contains("Kitchen"), "{label}: stderr:\n{}", o.stderr);
     }
+}
+
+#[test]
+fn r3_scope_under_a_repo_ancestor_is_checked() {
+    // The umbrella layout: the vault root is its own repo and a scope sits below it.
+    let fx = fixture("r3ancestor");
+    let d = &fx.0;
+    put(d, "schema.md", "# Schema\n\n```yaml\nroot: .\nscopes:\n  Vault/Kitchen:\n    domain: [kitchen]\n    types:\n      recipe:\n        status: {required: true}\n```\n");
+    put(d, "Vault/.git/HEAD", "ref\n");
+    put(d, "Vault/Kitchen/bad.md", "---\ntags: [kitchen, recipe]\ncreated: 2026-10-01\n---\n# Bad\n");
+    let all = run(d, &["schema.md", "."]);
+    assert_eq!(all.code, 1, "stdout:\n{}\nstderr:\n{}", all.stdout, all.stderr);
+    assert!(all.stdout.contains("Vault/Kitchen/bad.md:1: status: missing (required for recipe)"), "stdout:\n{}", all.stdout);
+    assert!(!all.stderr.contains("skipped Vault"), "scope ancestor skipped:\n{}", all.stderr);
+    let one = run(d, &["schema.md", "Vault/Kitchen/bad.md"]);
+    assert_eq!(one.code, 1, "stdout:\n{}\nstderr:\n{}", one.stdout, one.stderr);
+    assert!(one.stdout.contains("Vault/Kitchen/bad.md:1: status: missing (required for recipe)"), "stdout:\n{}", one.stdout);
+    assert!(!one.stderr.contains("(git repo)"), "stderr:\n{}", one.stderr);
 }
