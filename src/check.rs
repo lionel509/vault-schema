@@ -237,13 +237,15 @@ fn check_field(
                 kind_ok = false;
             }
             if let (true, Some(allowed)) = (kind_ok, &spec.values) {
-                let items: Vec<String> = match v {
-                    Yaml::Array(xs) => xs.iter().filter_map(scalar_str).collect(),
-                    other => scalar_str(other).into_iter().collect(),
+                let items: Vec<&Yaml> = match v {
+                    Yaml::Array(xs) => xs.iter().collect(),
+                    other => vec![other],
                 };
                 for item in items {
-                    if !allowed.contains(&item) {
-                        push(out, t, line, fname, format!("\"{item}\" not allowed (one of: {})", allowed.join(", ")), "value");
+                    // A null, map or nested list is never one of the allowed scalars.
+                    let ok = scalar_str(item).is_some_and(|s| allowed.contains(&s));
+                    if !ok {
+                        push(out, t, line, fname, format!("\"{}\" not allowed (one of: {})", show(item), allowed.join(", ")), "value");
                     }
                 }
             }
