@@ -793,3 +793,31 @@ fn date_must_exist() {
     }
     assert!(!o.stdout.contains("ok1.md") && !o.stdout.contains("ok2.md"), "valid dates flagged:\n{}", o.stdout);
 }
+
+#[test]
+fn breaker_closed_stderr_does_not_panic_during_skip_messages() {
+    // Skip lines go to stderr. A reader that closes after one line (`| head -1`)
+    // must not turn the run into a panic (exit 101).
+    use std::io::{BufRead, BufReader};
+    let fx = fixture("closedstderr");
+    let d = &fx.0;
+    put(d, "schema.md", SCHEMA);
+    for i in 0..3000 {
+        fs::create_dir_all(d.join(format!("Kitchen/r{i}/.git"))).unwrap();
+    }
+    let mut child = Command::new(bin())
+        .current_dir(d)
+        .env("PWD", d)
+        .args(["schema.md", "Kitchen"])
+        .stdout(std::process::Stdio::null())
+        .stderr(std::process::Stdio::piped())
+        .spawn()
+        .expect("spawn vault-schema");
+    let mut reader = BufReader::new(child.stderr.take().unwrap());
+    let mut line = String::new();
+    reader.read_line(&mut line).unwrap();
+    assert!(line.contains("(git repo)"), "first stderr line:\n{line}");
+    drop(reader);
+    let status = child.wait().expect("wait for vault-schema");
+    assert_eq!(status.code(), Some(0), "stderr closed early and the run did not exit 0");
+}
