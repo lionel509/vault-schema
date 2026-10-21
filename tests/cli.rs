@@ -883,3 +883,107 @@ fn r3_scope_under_a_repo_ancestor_is_checked() {
     assert!(one.stdout.contains("Vault/Kitchen/bad.md:1: status: missing (required for recipe)"), "stdout:\n{}", one.stdout);
     assert!(!one.stderr.contains("(git repo)"), "stderr:\n{}", one.stderr);
 }
+
+const RARE_SCHEMA: &str = r#"# Rare schema
+
+```yaml
+root: .
+exclude: [Kitchen/Archive]
+scopes:
+  Kitchen:
+    domain: [kitchen, bakery]
+    min_uses: 3
+    topics: [pasta]
+    types:
+      recipe: {}
+      reference: {}
+```
+"#;
+
+fn rare_fixture(name: &str) -> Fx {
+    let fx = fixture(name);
+    let d = &fx.0;
+    put(d, "schema.md", RARE_SCHEMA);
+    // zesty: a, b (b names it twice and once with a #, still one note each) = 2 notes.
+    put(d, "Kitchen/a.md", "---\ntags: [kitchen, recipe, zesty, pasta]\n---\n");
+    put(d, "Kitchen/b.md", "---\ntags: [kitchen, recipe, zesty, zesty, \"#Hearty\"]\n---\n");
+    // hearty: b (via #Hearty), c, d = 3 notes, so it is clean everywhere.
+    put(d, "Kitchen/c.md", "---\ntags: [kitchen, recipe, hearty]\n---\n");
+    put(d, "Kitchen/d.md", "---\ntags: [kitchen, recipe, hearty]\n---\n");
+    // bakery is a domain tag: used once, never rare.
+    put(d, "Kitchen/e.md", "---\ntags: [bakery, recipe]\n---\n");
+    // Excluded folder: its zesty notes must not count toward k.
+    put(d, "Kitchen/Archive/x1.md", "---\ntags: [kitchen, recipe, zesty]\n---\n");
+    put(d, "Kitchen/Archive/x2.md", "---\ntags: [kitchen, recipe, zesty]\n---\n");
+    put(d, "Kitchen/Archive/x3.md", "---\ntags: [kitchen, recipe, zesty]\n---\n");
+    // Nested repo under the scope: its notes must not count toward k either.
+    put(d, "Kitchen/Sub/.git/HEAD", "ref\n");
+    put(d, "Kitchen/Sub/s1.md", "---\ntags: [kitchen, recipe, zesty]\n---\n");
+    fx
+}
+
+#[test]
+fn rare_topic_tags_used_below_min_uses_are_flagged() {
+    let fx = rare_fixture("rare-dir");
+    let d = &fx.0;
+    let o = run(d, &["schema.md", "Kitchen"]);
+    assert_eq!(o.code, 1, "stdout:\n{}\nstderr:\n{}", o.stdout, o.stderr);
+    for want in [
+        "Kitchen/a.md:2: tags: \"zesty\" is used by 2 notes and isn't in the topic list — reuse an existing tag, or add it to the schema's topics",
+        "Kitchen/b.md:2: tags: \"zesty\" is used by 2 notes and isn't in the topic list — reuse an existing tag, or add it to the schema's topics",
+        "Kitchen/b.md:2: tags: \"#Hearty\": drop the #",
+    ] {
+        assert!(o.stdout.contains(want), "missing {want:?}, stdout:\n{}", o.stdout);
+    }
+    for clean in ["pasta", "hearty", "bakery", "Archive", "Sub"] {
+        assert!(!o.stdout.contains(clean), "{clean} must not be flagged or named:\n{}", o.stdout);
+    }
+    assert_eq!(last_line(&o.stdout), "vault-schema: 3 problems in 2 of 5 notes (tags 1, rare 2)");
+}
+
+#[test]
+fn rare_single_file_counts_the_whole_scope() {
+    let fx = rare_fixture("rare-single");
+    let d = &fx.0;
+    // One note of the pair: k must still be 2, counted from the scope.
+    let bad = run(d, &["schema.md", "Kitchen/a.md"]);
+    assert_eq!(bad.code, 1, "stdout:\n{}\nstderr:\n{}", bad.stdout, bad.stderr);
+    assert!(
+        bad.stdout.contains("Kitchen/a.md:2: tags: \"zesty\" is used by 2 notes and isn't in the topic list"),
+        "stdout:\n{}",
+        bad.stdout
+    );
+    assert_eq!(last_line(&bad.stdout), "vault-schema: 1 problems in 1 of 1 notes (rare 1)");
+    // The counting walk is quiet: no skip notices for the nested repo.
+    assert!(!bad.stderr.contains("git repo"), "stderr:\n{}", bad.stderr);
+    // A tag used by 3 notes in the scope is clean for one note alone.
+    let ok = run(d, &["schema.md", "Kitchen/c.md"]);
+    assert_eq!(ok.code, 0, "stdout:\n{}\nstderr:\n{}", ok.stdout, ok.stderr);
+    assert_eq!(last_line(&ok.stdout), "vault-schema: 0 problems in 1 notes");
+}
+
+#[test]
+fn rare_schema_errors_exit_2() {
+    let fx = fixture("rare-schema-err");
+    let d = &fx.0;
+    put(d, "Kitchen/x.md", GOOD_RECIPE);
+    let cases: [(&str, &str, &str); 6] = [
+        ("zero.md", "min_uses: 0", "min_uses"),
+        ("negative.md", "min_uses: -1", "min_uses"),
+        ("fraction.md", "min_uses: 2.5", "min_uses"),
+        ("text.md", "min_uses: many", "min_uses"),
+        ("domain-topic.md", "min_uses: 3\n    topics: [kitchen]", "also a domain or type tag"),
+        ("type-topic.md", "min_uses: 3\n    topics: [Recipe]", "also a domain or type tag"),
+    ];
+    for (file, body, want) in cases {
+        let text = format!(
+            "# S\n\n```yaml\nroot: .\nscopes:\n  Kitchen:\n    domain: [kitchen]\n    {body}\n    types:\n      recipe: {{}}\n```\n"
+        );
+        put(d, file, &text);
+        let o = run(d, &[file, "Kitchen"]);
+        assert_eq!(o.code, 2, "{file}: stdout:\n{}\nstderr:\n{}", o.stdout, o.stderr);
+        assert!(o.stdout.is_empty(), "{file}: stdout not empty:\n{}", o.stdout);
+        assert!(o.stderr.contains("vault-schema: schema:"), "{file}: stderr:\n{}", o.stderr);
+        assert!(o.stderr.contains(want), "{file}: want {want:?}, stderr:\n{}", o.stderr);
+    }
+}
