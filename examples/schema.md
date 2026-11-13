@@ -16,6 +16,8 @@ max_topic_tags: 3
 scopes:
   Kitchen:
     domain: [kitchen]
+    min_uses: 2
+    topics: [noodles]
     types:
       recipe:
         created: {required: true, kind: date}
