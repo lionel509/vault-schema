@@ -33,6 +33,10 @@ pub struct Scope {
     pub max_topic: usize,
     /// (content-type name, declared fields in schema order).
     pub types: Vec<(String, Vec<(String, Field)>)>,
+    /// Reviewed topic tags, normalised like note tags.
+    pub topics: Vec<String>,
+    /// A topic tag used by fewer notes in the scope than this is `rare`.
+    pub min_uses: Option<usize>,
 }
 
 pub struct Field {
@@ -166,12 +170,16 @@ pub fn load(path: &Path) -> Result<Schema, String> {
         let mut domain = None;
         let mut types = None;
         let mut scope_max = max_topic;
+        let mut topics: Vec<String> = Vec::new();
+        let mut min_uses = None;
         let where_ = format!("scope {name}");
         for (fk, fv) in as_map(v, &where_)?.iter() {
             match key(fk)? {
                 "domain" => domain = Some(str_list(fv, &format!("domain in {where_}"))?),
                 "types" => types = Some(parse_types(fv, name)?),
                 "max_topic_tags" => scope_max = uint(fv, &format!("max_topic_tags in {where_}"))?,
+                "topics" => topics = str_list(fv, &format!("topics in {where_}"))?,
+                "min_uses" => min_uses = Some(positive(fv, &format!("min_uses in {where_}"))?),
                 other => return Err(format!("schema: unknown key {other} in {where_}")),
             }
         }
@@ -181,8 +189,30 @@ pub fn load(path: &Path) -> Result<Schema, String> {
         let types = types
             .filter(|t| !t.is_empty())
             .ok_or_else(|| format!("schema: {where_} needs non-empty types"))?;
-        let domain = domain.into_iter().map(|d| d.to_lowercase()).collect();
-        scopes.push(Scope { name: name.to_string(), path: lc(&path), domain, max_topic: scope_max, types });
+        let domain: Vec<String> = domain.into_iter().map(|d| d.to_lowercase()).collect();
+        // A stray space would make a topic that can never match its tag. Reject it
+        // rather than let it pass silently.
+        for raw in &topics {
+            if raw.trim() != raw || norm_tag(raw).is_empty() {
+                return Err(format!("schema: topic \"{raw}\" in {where_} is empty or has leading/trailing spaces"));
+            }
+        }
+        let topics: Vec<String> = topics.iter().map(|t| norm_tag(t)).collect();
+        for t in &topics {
+            let is_type = types.iter().any(|(n, _)| n.to_lowercase() == *t);
+            if domain.contains(t) || is_type {
+                return Err(format!("schema: topic {t} in {where_} is also a domain or type tag"));
+            }
+        }
+        scopes.push(Scope {
+            name: name.to_string(),
+            path: lc(&path),
+            domain,
+            max_topic: scope_max,
+            types,
+            topics,
+            min_uses,
+        });
     }
 
     for (alias, _) in &synonyms {
@@ -228,6 +258,28 @@ fn yaml_block(text: &str) -> Result<(String, usize), String> {
         .map(|i| i + start + 1)
         .ok_or_else(none)?;
     Ok((lines[start + 1..end].join("\n"), start))
+}
+
+/// A tag as note tags are read: one leading `#` dropped, lowercased.
+pub fn norm_tag(x: &str) -> String {
+    x.strip_prefix('#').unwrap_or(x).to_lowercase()
+}
+
+/// Index of the scope that owns a root-relative, lowercased path: the longest match.
+pub fn scope_index(s: &Schema, rel_lc: &Path) -> Option<usize> {
+    s.scopes
+        .iter()
+        .enumerate()
+        .filter(|(_, sc)| rel_lc.starts_with(&sc.path))
+        .max_by_key(|(_, sc)| sc.path.components().count())
+        .map(|(i, _)| i)
+}
+
+fn positive(v: &Yaml, what: &str) -> Result<usize, String> {
+    match v {
+        Yaml::Integer(i) if *i >= 1 => Ok(*i as usize),
+        _ => Err(format!("schema: {what} must be a positive integer")),
+    }
 }
 
 fn key(k: &Yaml) -> Result<&str, String> {
